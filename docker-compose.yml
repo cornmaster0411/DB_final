@@ -1,0 +1,38 @@
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=${DB_PASSWORD}
+      - MSSQL_PID=Express
+    volumes:
+      - mssql_data:/var/opt/mssql
+    restart: no
+
+  dbgate: 
+    image: dbgate/dbgate:latest
+    container_name: dbgate
+    ports:
+      - "8080:3000"  # 映射到原 Adminer 端口
+    environment:
+      - CONNECTIONS=mssql_conn  # 預設連接名稱
+      - LABEL_mssql_conn=My MSSQL Server
+      - SERVER_mssql_conn=mssql  # 指向你的 MSSQL 容器
+      - USER_mssql_conn=sa
+      - PASSWORD_mssql_conn=${DB_PASSWORD}
+      - PORT_mssql_conn=1433
+      - ENGINE_mssql_conn=mssql@dbgate-plugin-mssql
+    volumes:
+      - dbgate_data:/root/.dbgate  # 持久化連接和設定 (可選)
+    depends_on:
+      - mssql
+    restart: no
+
+volumes:
+  mssql_data:
+    driver: local
+  dbgate_data:  # 新增卷宗
+    driver: local
