@@ -1,6 +1,5 @@
 import pandas as pd
 import yfinance as yf
-import math
 from sqlalchemy import text # 引入 SQL 執行套件
 from models import DailyPrice
 
@@ -57,14 +56,54 @@ class PriceFetcher:
                 print(f"❌ 錯誤: {e}")
                 
         # ==========================================
-        # ✨ 關鍵：所有股票資料都寫入 DB 後，呼叫 SP 計算 MA 和 BIAS
+        # ✨ 關鍵：所有股票資料都寫入 DB 後，計算 MA 和 BIAS
         # ==========================================
-        print("\n⚙️ 正在呼叫資料庫 Stored Procedure 計算技術指標 (MA, BIAS)...")
+        print("\n⚙️ 正在計算技術指標 (MA, BIAS)...")
         with self.SessionLocal() as session:
             try:
-                session.execute(text("EXEC sp_CalculateTechnicalIndicators"))
+                bind_name = session.get_bind().dialect.name
+                if bind_name == "mssql":
+                    session.execute(text("EXEC sp_CalculateTechnicalIndicators"))
+                else:
+                    self._calculate_indicators_in_python(session, stock_list)
                 session.commit()
-                print("✅ 資料庫端技術指標計算完成！")
+                print("✅ 技術指標計算完成！")
             except Exception as e:
                 session.rollback()
-                print(f"❌ 呼叫 SP 失敗: {e}")
+                print(f"❌ 技術指標計算失敗: {e}")
+
+    def _calculate_indicators_in_python(self, session, stock_list: list):
+        for stock_code in stock_list:
+            records = session.query(DailyPrice).filter(
+                DailyPrice.stock_code == stock_code
+            ).order_by(DailyPrice.date.asc()).all()
+
+            if not records:
+                continue
+
+            df = pd.DataFrame([{
+                "date": record.date,
+                "close_price": record.close_price,
+            } for record in records])
+
+            for period in [5, 10, 20, 60, 120, 240]:
+                df[f"ma_{period}"] = df["close_price"].rolling(period).mean()
+
+            df["bias_10"] = ((df["close_price"] - df["ma_10"]) / df["ma_10"]) * 100
+            df["bias_20"] = ((df["close_price"] - df["ma_20"]) / df["ma_20"]) * 100
+
+            values = df.set_index("date").to_dict("index")
+            for record in records:
+                row = values[record.date]
+                record.ma_5 = self._none_if_nan(row["ma_5"])
+                record.ma_10 = self._none_if_nan(row["ma_10"])
+                record.ma_20 = self._none_if_nan(row["ma_20"])
+                record.ma_60 = self._none_if_nan(row["ma_60"])
+                record.ma_120 = self._none_if_nan(row["ma_120"])
+                record.ma_240 = self._none_if_nan(row["ma_240"])
+                record.bias_10 = self._none_if_nan(row["bias_10"])
+                record.bias_20 = self._none_if_nan(row["bias_20"])
+
+    @staticmethod
+    def _none_if_nan(value):
+        return None if pd.isna(value) else float(value)

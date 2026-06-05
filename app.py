@@ -1,14 +1,16 @@
 import streamlit as st
 import pandas as pd
 from db_config import get_db_session
-from models import Stock, DailyPrice
+from models import Stock, DailyPrice, InstitutionalTrade
 from indicator_calculator import IndicatorCalculator
 from strategy_engine import StrategyEngine
+from research_indicator_calculator import ResearchIndicatorCalculator
 
 # 引入我們剛剛拆分出去的模組
 from ui_diagnostic import render_diagnostic, render_diagnosis_panel
 from ui_backtest import render_backtest
 from ui_portfolio import render_portfolio
+from ui_foxconn_research import render_daily_advice_page, render_foxconn_research
 
 # 網頁基本設定
 st.set_page_config(page_title="0050 智能量化分析系統", layout="wide")
@@ -39,6 +41,48 @@ def load_stock_data(stock_code):
         } for r in records]).iloc[::-1]
         return df
 
+@st.cache_data(ttl=300)
+def load_institutional_data(stock_code):
+    with get_db_session()() as session:
+        records = session.query(InstitutionalTrade).filter(
+            InstitutionalTrade.stock_code == stock_code
+        ).order_by(InstitutionalTrade.date.asc()).all()
+
+        if not records:
+            return pd.DataFrame()
+
+        return pd.DataFrame([{
+            'date': r.date,
+            'foreign_net_buy': r.foreign_net_buy,
+            'investment_trust_net_buy': r.investment_trust_net_buy,
+            'dealer_net_buy': r.dealer_net_buy,
+            'total_net_buy': r.total_net_buy,
+        } for r in records])
+
+def enrich_backtest_data(df_signals, stock_code, institutional_window=5):
+    research_df = ResearchIndicatorCalculator(df_signals).calculate_all()
+    research_df = ResearchIndicatorCalculator.add_research_signals(research_df)
+    research_df['date'] = pd.to_datetime(research_df['date'])
+
+    institutional_df = load_institutional_data(stock_code)
+    if institutional_df.empty:
+        for col in ['foreign_net_buy', 'investment_trust_net_buy', 'dealer_net_buy', 'total_net_buy']:
+            research_df[col] = 0
+    else:
+        institutional_df['date'] = pd.to_datetime(institutional_df['date'])
+        research_df = research_df.merge(institutional_df, on='date', how='left')
+        for col in ['foreign_net_buy', 'investment_trust_net_buy', 'dealer_net_buy', 'total_net_buy']:
+            research_df[col] = research_df[col].fillna(0)
+
+    research_df['foreign_recent_net_buy'] = research_df['foreign_net_buy'].rolling(institutional_window, min_periods=1).sum()
+    research_df['total_recent_net_buy'] = research_df['total_net_buy'].rolling(institutional_window, min_periods=1).sum()
+    research_df['foreign_recent_buy'] = research_df['foreign_recent_net_buy'] > 0
+    research_df['foreign_recent_sell'] = research_df['foreign_recent_net_buy'] < 0
+    research_df['total_recent_buy'] = research_df['total_recent_net_buy'] > 0
+    research_df['total_recent_sell'] = research_df['total_recent_net_buy'] < 0
+    research_df['foreign_week_net_buy_next_day'] = research_df['foreign_recent_buy'].shift(1, fill_value=False).astype(bool)
+    return research_df
+
 with st.sidebar:
     st.header("⚙️ 系統控制")
     if st.button("🔄 強制刷新最新資料"):
@@ -48,7 +92,7 @@ with st.sidebar:
 st.title("📈 智能量化分析系統")
 
 # ================= 頁籤切換路由 =================
-tab1, tab2, tab3 = st.tabs(["📊 個股即時診斷看板", "⚙️ 泛用型策略回測", "💰 個人投資帳戶"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 個股即時診斷看板", "⚙️ 泛用型策略回測", "💰 個人投資帳戶", "🔬 泛用型策略回測1", "🕣 每日投資建議"])
 
 with tab1:
     stock_options = load_stock_list()
@@ -66,6 +110,7 @@ with tab1:
         df_signals = engine.generate_all_signals(ma_period=20, rsi_period=10, kd_period=9, bias_threshold=10)
         df_signals = df_signals.reset_index()
         df_signals['date'] = pd.to_datetime(df_signals['date'])
+        df_signals = enrich_backtest_data(df_signals, stock_code)
         
         available_dates = df_signals['date'].dt.date.tolist()
         default_date = available_dates[-1]
@@ -84,3 +129,9 @@ with tab2:
 
 with tab3:
     render_portfolio()
+
+with tab4:
+    render_foxconn_research()
+
+with tab5:
+    render_daily_advice_page()

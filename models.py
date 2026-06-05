@@ -1,4 +1,4 @@
-from sqlalchemy import NVARCHAR, Column, Integer, String, Date, Float, BigInteger, Boolean, create_engine
+from sqlalchemy import NVARCHAR, Column, Integer, String, Date, Float, BigInteger, Boolean, create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 Base = declarative_base()
@@ -43,7 +43,21 @@ class DailyPrice(Base):
     bias_20 = Column(Float, comment="20日乖離率")
 
 
-# 第三張表：個人交易紀錄表
+# 第三張表：三大法人每日買賣超
+class InstitutionalTrade(Base):
+    """三大法人買賣超資料，來源為 TWSE T86 日報。"""
+    __tablename__ = 'institutional_trades'
+
+    stock_code = Column(String(10), primary_key=True, comment="股票代號")
+    date = Column(Date, primary_key=True, comment="交易日期")
+
+    foreign_net_buy = Column(BigInteger, comment="外資及陸資買賣超股數")
+    investment_trust_net_buy = Column(BigInteger, comment="投信買賣超股數")
+    dealer_net_buy = Column(BigInteger, comment="自營商買賣超股數")
+    total_net_buy = Column(BigInteger, comment="三大法人買賣超股數合計")
+
+
+# 第四張表：個人交易紀錄表
 class TransactionRecord(Base):
     """個人交易紀錄表"""
     __tablename__ = 'transaction_records'
@@ -60,7 +74,20 @@ class TransactionRecord(Base):
 
 def setup_database(db_url: str):
     """初始化資料庫與自動建表"""
-    engine = create_engine(db_url, echo=False)
+    connect_args = {}
+    if db_url.startswith("sqlite"):
+        connect_args = {"timeout": 30, "check_same_thread": False}
+
+    engine = create_engine(db_url, echo=False, connect_args=connect_args)
+
+    if db_url.startswith("sqlite"):
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragmas(dbapi_connection, _):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=30000")
+            cursor.close()
+
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine)
     return SessionLocal

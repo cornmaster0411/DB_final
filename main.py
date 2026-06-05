@@ -2,6 +2,10 @@ import sys
 from scheduler_manager import SchedulerManager
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+
     manager = SchedulerManager()
     
     if len(sys.argv) > 1 and sys.argv[1] == "update":

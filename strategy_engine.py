@@ -4,7 +4,7 @@ import numpy as np
 class StrategyEngine:
     """
     綜合量化策略引擎：
-    依照 MD -> RSI -> KD -> BIAS -> 葛蘭必 的順序計算所有訊號。
+    依照 MD -> RSI -> KD -> BIAS -> 葛蘭碧 的順序計算所有訊號。
     使用矩陣運算，一次性處理所有歷史資料。
     """
     def __init__(self, df: pd.DataFrame):
@@ -19,7 +19,7 @@ class StrategyEngine:
         self._calc_rsi_signals(rsi_period)                  # 2. RSI 訊號
         self._calc_kd_signals()                             # 3. KD 訊號
         self._calc_bias_signals(ma_period, bias_threshold)  # 4. BIAS 乖離率
-        self._calc_granville(ma_period, bias_threshold)     # 5. 葛蘭必八大法則
+        self._calc_granville(ma_period, bias_threshold)     # 5. 葛蘭碧八大法則
         
         return self.df
 
@@ -79,7 +79,7 @@ class StrategyEngine:
             self.df.loc[bias < -threshold, 'signal_bias'] = f'🔴 負乖離過大 (<-{threshold}%)'
 
     def _calc_granville(self, ma_period, bias_threshold):
-        """【5. 葛蘭必八大法則】完整實作四買四賣"""
+        """【5. 葛蘭碧八大法則】完整實作四買四賣"""
         self.df['signal_granville'] = '無'
         ma_col = f'ma_{ma_period}'
         bias_col = f'bias_{ma_period}'

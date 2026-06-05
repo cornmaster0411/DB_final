@@ -1,4 +1,5 @@
 import os
+from urllib.parse import quote_plus
 from dotenv import load_dotenv
 from models import setup_database
 
@@ -9,7 +10,13 @@ load_dotenv()
 _SessionLocal = None
 
 def get_db_url() -> str:
-    """從環境變數組裝並回傳 MS SQL 資料庫連線字串"""
+    """從環境變數組裝並回傳資料庫連線字串"""
+    db_driver = os.getenv('DB_DRIVER', 'mssql').lower()
+
+    if db_driver == 'sqlite':
+        sqlite_path = os.getenv('DB_SQLITE_PATH', 'db_final.sqlite3')
+        return f"sqlite:///{sqlite_path}"
+
     user = os.getenv('DB_USER')
     password = os.getenv('DB_PASSWORD')
     server = os.getenv('DB_SERVER')
@@ -19,10 +26,16 @@ def get_db_url() -> str:
     if not all([user, password, server, db_name]):
         raise ValueError("❌ 資料庫環境變數設定不完整，請檢查 .env 檔案！")
 
-    db_url = (
-        f"mssql+pyodbc://{user}:{password}@{server}/{db_name}"
-        "?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+    odbc_string = (
+        "DRIVER={ODBC Driver 18 for SQL Server};"
+        f"SERVER={server};"
+        f"DATABASE={db_name};"
+        f"UID={user};"
+        f"PWD={password};"
+        "Encrypt=no;"
+        "TrustServerCertificate=yes;"
     )
+    db_url = f"mssql+pyodbc:///?odbc_connect={quote_plus(odbc_string)}"
     return db_url
 
 def get_db_session():
