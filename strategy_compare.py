@@ -45,8 +45,8 @@ def prepare_strategy_specs() -> list[StrategySpec]:
     ]
 
 
-class FoxconnBacktester:
-    """Batch backtester for the Foxconn research page.
+class StrategyBacktester:
+    """Batch backtester for the generic strategy comparison page.
 
     Signals are observed at day close and executed at the next trading day's open
     to avoid same-bar lookahead.

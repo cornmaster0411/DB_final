@@ -10,7 +10,7 @@ from research_indicator_calculator import ResearchIndicatorCalculator
 from ui_diagnostic import render_diagnostic, render_diagnosis_panel
 from ui_backtest import render_backtest
 from ui_portfolio import render_portfolio
-from ui_foxconn_research import render_daily_advice_page, render_foxconn_research
+from ui_strategy_research import render_daily_advice_page, render_strategy_research
 
 # 網頁基本設定
 st.set_page_config(page_title="0050 智能量化分析系統", layout="wide")
@@ -18,10 +18,18 @@ st.set_page_config(page_title="0050 智能量化分析系統", layout="wide")
 @st.cache_data(ttl=300)
 def load_stock_list():
     with get_db_session()() as session:
-        stocks = session.query(Stock).filter(
-            (Stock.is_taiwan50 == True) | (Stock.is_index == True)
-        ).all()
-        return [f"{s.stock_code} {s.name}" for s in stocks]
+        price_codes = [
+            row[0]
+            for row in session.query(DailyPrice.stock_code)
+            .distinct()
+            .order_by(DailyPrice.stock_code.asc())
+            .all()
+        ]
+        stock_names = {
+            stock.stock_code: stock.name
+            for stock in session.query(Stock).filter(Stock.stock_code.in_(price_codes)).all()
+        }
+        return [f"{code} {stock_names.get(code, code)}" for code in price_codes]
 
 @st.cache_data(ttl=300)
 def load_stock_data(stock_code):
@@ -131,7 +139,7 @@ with tab3:
     render_portfolio()
 
 with tab4:
-    render_foxconn_research()
+    render_strategy_research()
 
 with tab5:
     render_daily_advice_page()

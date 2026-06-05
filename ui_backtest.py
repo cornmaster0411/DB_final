@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 def render_backtest(df, stock_code):
     st.subheader("🛠️ 自訂條件策略回測中心")
     if 'foreign_net_buy' in df.columns:
-        st.caption("此頁已整合 BB、MACD、KDJ 與三大法人條件；法人資料需先在「鴻海法人策略研究」頁籤更新。")
+        st.caption("此頁已整合 BB、MACD、KDJ 與三大法人條件；法人資料需先用後台指令匯入資料庫。")
     
     # ==========================================
     # 1. 參數設定區

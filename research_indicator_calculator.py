@@ -3,7 +3,7 @@ import pandas as pd
 
 
 class ResearchIndicatorCalculator:
-    """Indicators used by the Foxconn strategy comparison page."""
+    """Indicators used by the generic strategy comparison page."""
 
     def __init__(self, df: pd.DataFrame):
         self.df = df.copy()

@@ -12,6 +12,10 @@ def main():
         print("=== 進入手動維護模式：單次更新 ===")
         manager.run_manual_update()
         print("\n🎉 單次更新完畢，系統結束。")
+    elif len(sys.argv) > 1 and sys.argv[1] == "update_institutional":
+        print("=== 進入手動維護模式：補齊三大法人資料 ===")
+        manager.run_institutional_update()
+        print("\n🎉 三大法人資料補齊完畢，系統結束。")
     else:
         print("=== 啟動自動化排程模式 ===")
         try:

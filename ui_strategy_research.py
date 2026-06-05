@@ -7,8 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from db_config import get_db_session
-from foxconn_strategy_compare import FoxconnBacktester, StrategySpec, prepare_strategy_specs
-from institutional_fetcher import InstitutionalFetcher
+from strategy_compare import StrategyBacktester, StrategySpec, prepare_strategy_specs
 from models import DailyPrice, InstitutionalTrade, Stock, TransactionRecord
 from research_indicator_calculator import ResearchIndicatorCalculator
 
@@ -19,11 +18,19 @@ FOREIGN_WEEK_DAYS = 5
 @st.cache_data(ttl=300)
 def load_research_stock_options():
     with get_db_session()() as session:
-        stocks = session.query(Stock).filter(
-            Stock.is_index != True
-        ).order_by(Stock.stock_code.asc()).all()
+        price_codes = [
+            row[0]
+            for row in session.query(DailyPrice.stock_code)
+            .distinct()
+            .order_by(DailyPrice.stock_code.asc())
+            .all()
+        ]
+        stock_names = {
+            stock.stock_code: stock.name
+            for stock in session.query(Stock).filter(Stock.stock_code.in_(price_codes)).all()
+        }
 
-    return [f"{s.stock_code} {s.name}" for s in stocks if s.stock_code != "^TWII"]
+    return [f"{code} {stock_names.get(code, code)}" for code in price_codes if code != "^TWII"]
 
 
 @st.cache_data(ttl=300)
@@ -397,7 +404,7 @@ def render_daily_advice_page():
     render_daily_advice_and_portfolio(stock_options, default_code)
 
 
-def render_foxconn_research():
+def render_strategy_research():
     st.subheader("泛用型策略回測1")
 
     stock_options = load_research_stock_options()
@@ -511,18 +518,10 @@ def render_foxconn_research():
             )
 
         st.markdown("---")
-        _, fetch_col = st.columns([2, 1])
-        with fetch_col:
-            st.write("")
-            if st.button(f"更新 {stock_code} {stock_name} 三大法人資料", width="stretch", key="research_fetch_button"):
-                fetcher = InstitutionalFetcher(get_db_session())
-                count = fetcher.fetch_and_save(
-                    stock_code,
-                    start_date.strftime("%Y-%m-%d"),
-                    end_date.strftime("%Y-%m-%d"),
-                )
-                st.cache_data.clear()
-                st.success(f"已依回測區間寫入 {count} 筆法人資料")
+        if st.button("輸出結果查詢", width="stretch", key="research_query_button"):
+            st.cache_data.clear()
+            st.success("已從資料庫重新查詢並更新回測結果。")
+        st.caption("本頁回測只讀取資料庫資料，不會在查詢區間時呼叫外部 API。若法人資料不足，請先執行 `python main.py update_institutional` 匯入。")
 
     price_df = load_research_price_data(stock_code)
     inst_df = load_research_institutional_data(stock_code)
@@ -542,7 +541,7 @@ def render_foxconn_research():
         st.warning("此區間沒有資料。")
         return
 
-    backtester = FoxconnBacktester(
+    backtester = StrategyBacktester(
         df_bt,
         initial_capital=initial_capital,
         fee_rate=fee_rate,
