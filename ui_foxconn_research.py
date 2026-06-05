@@ -203,8 +203,14 @@ def load_close_price_matrix(stock_codes, lookback_days=252):
     return matrix.tail(lookback_days).ffill().dropna(axis=1)
 
 
-def make_advice(df, stock_code, label, holding_row=None):
-    latest = df.iloc[-1]
+def make_advice(df, stock_code, label, holding_row=None, report_time="08:30 盤前建議"):
+    if report_time.startswith("08:30") and len(df) >= 2:
+        latest = df.iloc[-2]
+        price_label = "昨日收盤價"
+    else:
+        latest = df.iloc[-1]
+        price_label = "最新可得價"
+
     buy_reasons = _matched_buy_rules(latest, ["葛蘭碧買點", "外資週淨買超", "BB 下緣反彈", "MACD 黃金交叉", "KDJ 黃金交叉"])
     sell_reasons = _matched_sell_rules(latest, ["葛蘭碧賣點", "外資週淨賣超", "BB 觸及上緣", "MACD 死亡交叉", "KDJ 死亡交叉"])
 
@@ -229,7 +235,7 @@ def make_advice(df, stock_code, label, holding_row=None):
         "股票": label,
         "建議": action,
         "原因": reason,
-        "補充": f"收盤價 {latest['close_price']:.2f}{pnl_text}",
+        "補充": f"{price_label} {latest['close_price']:.2f}（資料日 {pd.to_datetime(latest['date']).date()}）{pnl_text}",
     }
 
 
@@ -306,10 +312,13 @@ def render_daily_advice_and_portfolio(stock_options, selected_stock_code):
                 holding_row = None
                 if not positions.empty and code in holding_codes:
                     holding_row = positions[positions["股票代號"] == code].iloc[0]
-                advice_rows.append(make_advice(research_df, code, option_map.get(code, code), holding_row))
+                advice_rows.append(make_advice(research_df, code, option_map.get(code, code), holding_row, report_time))
 
             if advice_rows:
-                st.caption(f"{report_time}：依最新資料產生。若盤中即時價未更新，會使用資料庫最新收盤價。")
+                if report_time.startswith("08:30"):
+                    st.caption("08:30 盤前建議：使用上一個已完成交易日資料，適合作為開盤前觀察。")
+                else:
+                    st.caption("13:50 盤中建議：目前使用資料庫最新可得資料；若尚未串即時盤中價，會以最新收盤資料輔助判斷。")
                 st.dataframe(pd.DataFrame(advice_rows), width="stretch", hide_index=True)
             else:
                 st.info("觀察清單目前沒有可用價格資料。")
@@ -502,23 +511,18 @@ def render_foxconn_research():
             )
 
         st.markdown("---")
-        f1, f2, f3 = st.columns([1, 1, 2])
-        with f1:
-            fetch_start = st.date_input("法人資料起始日", value=date.today() - timedelta(days=365), key="research_fetch_start")
-        with f2:
-            fetch_end = st.date_input("法人資料結束日", value=date.today(), key="research_fetch_end")
-        with f3:
-            st.write("")
+        _, fetch_col = st.columns([2, 1])
+        with fetch_col:
             st.write("")
             if st.button(f"更新 {stock_code} {stock_name} 三大法人資料", width="stretch", key="research_fetch_button"):
                 fetcher = InstitutionalFetcher(get_db_session())
                 count = fetcher.fetch_and_save(
                     stock_code,
-                    fetch_start.strftime("%Y-%m-%d"),
-                    fetch_end.strftime("%Y-%m-%d"),
+                    start_date.strftime("%Y-%m-%d"),
+                    end_date.strftime("%Y-%m-%d"),
                 )
                 st.cache_data.clear()
-                st.success(f"已寫入 {count} 筆法人資料")
+                st.success(f"已依回測區間寫入 {count} 筆法人資料")
 
     price_df = load_research_price_data(stock_code)
     inst_df = load_research_institutional_data(stock_code)
@@ -557,7 +561,7 @@ def render_foxconn_research():
             "最大回撤(%)": "{:.2f}",
             "勝率(%)": "{:.1f}",
         }),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
@@ -594,6 +598,6 @@ def render_foxconn_research():
                 "報酬率(%)": "{:.2f}",
                 "損益": "{:,.0f}",
             }),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )

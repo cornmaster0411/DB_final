@@ -117,7 +117,7 @@ def render_backtest(df, stock_code):
     # ==========================================
     # 2. 執行回測運算引擎
     # ==========================================
-    if st.button("🚀 執行歷史回測", type="primary", use_container_width=True):
+    if st.button("🚀 執行歷史回測", type="primary", width="stretch"):
         
         # 防呆檢查：日期順序是否正確
         if start_date > end_date:
@@ -358,7 +358,7 @@ def render_backtest(df, stock_code):
                     "報酬率(%)": "{:.2f}%",
                     "交易股數": "{:,}"
                 }),
-                use_container_width=True, hide_index=True
+                width="stretch", hide_index=True
             )
         else:
             st.info("此次回測期間內未觸發任何交易。")

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import time
 from typing import Any
 
 import requests
@@ -13,6 +14,13 @@ class InstitutionalFetcher:
 
     def __init__(self, session_maker):
         self.SessionLocal = session_maker
+        self.http = requests.Session()
+        self.http.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/125.0 Safari/537.36",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Referer": "https://www.twse.com.tw/zh/trading/foreign/t86.html",
+        })
 
     @staticmethod
     def _parse_int(value: Any) -> int:
@@ -37,9 +45,9 @@ class InstitutionalFetcher:
             "selectType": "ALLBUT0999",
             "response": "json",
         }
-        response = requests.get(self.TWSE_T86_URL, params=params, timeout=20)
-        response.raise_for_status()
-        payload = response.json()
+        payload = self._get_json(params)
+        if payload is None:
+            return None
 
         if payload.get("stat") != "OK":
             return None
@@ -87,9 +95,46 @@ class InstitutionalFetcher:
             "total_net_buy": total,
         }
 
+    def _get_json(self, params: dict) -> dict | None:
+        for attempt in range(3):
+            response = self.http.get(self.TWSE_T86_URL, params=params, timeout=20)
+            if response.status_code in {429, 500, 502, 503, 504}:
+                time.sleep(1.5 + attempt)
+                continue
+
+            response.raise_for_status()
+            text = response.text.strip()
+            if not text or text[0] not in "[{":
+                time.sleep(1.5 + attempt)
+                continue
+
+            try:
+                return response.json()
+            except ValueError:
+                time.sleep(1.5 + attempt)
+
+        return None
+
     def fetch_and_save(self, stock_code: str, start_date: str, end_date: str) -> int:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+        with self.SessionLocal() as session:
+            existing_dates = {
+                row.date for row in session.query(InstitutionalTrade.date).filter(
+                    InstitutionalTrade.stock_code == stock_code,
+                    InstitutionalTrade.date >= start_dt,
+                    InstitutionalTrade.date <= end_dt,
+                ).all()
+            }
+
         rows_to_save = []
+        skipped_count = len(existing_dates)
+        missing_count = 0
         for trade_date in self._date_range(start_date, end_date):
+            if trade_date in existing_dates:
+                continue
+
+            missing_count += 1
             try:
                 data = self.fetch_one_day(stock_code, trade_date)
             except Exception as exc:
@@ -98,6 +143,10 @@ class InstitutionalFetcher:
 
             if data:
                 rows_to_save.append(data)
+            else:
+                skipped_count += 1
+
+            time.sleep(0.25)
 
         saved_count = 0
         batch_size = 50
@@ -110,4 +159,9 @@ class InstitutionalFetcher:
                         saved_count += 1
                 session.commit()
 
+        if skipped_count:
+            print(f"法人資料 {stock_code} 已有 {skipped_count} 天，直接略過不重抓")
+        no_data_count = missing_count - len(rows_to_save)
+        if no_data_count:
+            print(f"法人資料 {stock_code} 另有 {no_data_count} 天為休市、無資料或 TWSE 暫時無回應")
         return saved_count
