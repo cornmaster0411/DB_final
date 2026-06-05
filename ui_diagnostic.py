@@ -118,13 +118,13 @@ def render_diagnosis_panel(df_signals, available_dates, default_date):
         if current['signal_bias'] != '無': st.warning(current['signal_bias'])
         else: st.write(f"⚪ 乖離正常 (MA10 乖離: {current['bias_10']:.2f}%)")
 
-        st.markdown(info_tooltip("5. 葛蘭必法則 (八大買賣點)"), help="利用均線方向與股價突破/跌破的關係，判斷絕佳的進出場時機。")
+        st.markdown(info_tooltip("5. 葛蘭碧法則 (八大買賣點)"), help="利用均線方向與股價突破/跌破的關係，判斷絕佳的進出場時機。")
         if current['signal_granville'] != '無': 
             if '買點' in current['signal_granville']:
                 st.error(current['signal_granville']) 
             else:
                 st.success(current['signal_granville']) 
         else: 
-            st.write("⚪ 當日無觸發葛蘭必買賣點")
+            st.write("⚪ 當日無觸發葛蘭碧買賣點")
     else:
         st.warning("所選日期之前無交易資料。")

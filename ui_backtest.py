@@ -5,6 +5,8 @@ from plotly.subplots import make_subplots
 
 def render_backtest(df, stock_code):
     st.subheader("🛠️ 自訂條件策略回測中心")
+    if 'foreign_net_buy' in df.columns:
+        st.caption("此頁已整合 BB、MACD、KDJ 與三大法人條件；法人資料需先用後台指令匯入資料庫。")
     
     # ==========================================
     # 1. 參數設定區
@@ -45,7 +47,18 @@ def render_backtest(df, stock_code):
             st.markdown("#### 📈 買入條件 (多單進場)")
             buy_signals = st.multiselect(
                 "選擇買入技術訊號", 
-                ["KD 黃金交叉", "RSI 超賣 (<30)", "負乖離過大", "葛蘭必買點", "均線多頭排列"],
+                [
+                    "KD 黃金交叉",
+                    "KDJ 黃金交叉",
+                    "MACD 黃金交叉",
+                    "BB 下緣反彈",
+                    "RSI 超賣 (<30)",
+                    "負乖離過大",
+                    "葛蘭碧買點",
+                    "均線多頭排列",
+                    "外資一週內淨買超（隔日買入）",
+                    "三大法人週淨買超",
+                ],
                 default=["KD 黃金交叉", "均線多頭排列"],
                 disabled=buy_and_hold
             )
@@ -67,7 +80,18 @@ def render_backtest(df, stock_code):
             st.markdown("#### 📉 賣出條件 (多單出場)")
             sell_signals = st.multiselect(
                 "選擇賣出技術訊號", 
-                ["KD 死亡交叉", "RSI 超買 (>70)", "正乖離過大", "葛蘭必賣點", "均線空頭排列"],
+                [
+                    "KD 死亡交叉",
+                    "KDJ 死亡交叉",
+                    "MACD 死亡交叉",
+                    "BB 觸及上緣",
+                    "RSI 超買 (>70)",
+                    "正乖離過大",
+                    "葛蘭碧賣點",
+                    "均線空頭排列",
+                    "外資週淨賣超",
+                    "三大法人週淨賣超",
+                ],
                 default=["KD 死亡交叉"],
                 disabled=buy_and_hold
             )
@@ -93,7 +117,7 @@ def render_backtest(df, stock_code):
     # ==========================================
     # 2. 執行回測運算引擎
     # ==========================================
-    if st.button("🚀 執行歷史回測", type="primary", use_container_width=True):
+    if st.button("🚀 執行歷史回測", type="primary", width="stretch"):
         
         # 防呆檢查：日期順序是否正確
         if start_date > end_date:
@@ -147,18 +171,28 @@ def render_backtest(df, stock_code):
             # 判斷買入條件
             matched_buy_rules = []
             if "KD 黃金交叉" in buy_signals and '黃金交叉' in str(row['signal_kd']): matched_buy_rules.append("KD金叉")
+            if "KDJ 黃金交叉" in buy_signals and bool(row.get('kdj_buy', False)): matched_buy_rules.append("KDJ金叉")
+            if "MACD 黃金交叉" in buy_signals and bool(row.get('macd_buy', False)): matched_buy_rules.append("MACD金叉")
+            if "BB 下緣反彈" in buy_signals and bool(row.get('bb_buy', False)): matched_buy_rules.append("BB下緣反彈")
             if "RSI 超賣 (<30)" in buy_signals and '超賣' in str(row['signal_rsi']): matched_buy_rules.append("RSI超賣")
             if "負乖離過大" in buy_signals and '負乖離' in str(row['signal_bias']): matched_buy_rules.append("負乖離過大")
-            if "葛蘭必買點" in buy_signals and '買點' in str(row['signal_granville']): matched_buy_rules.append(row['signal_granville'])
+            if "葛蘭碧買點" in buy_signals and '買點' in str(row['signal_granville']): matched_buy_rules.append(row['signal_granville'])
             if "均線多頭排列" in buy_signals and '多頭排列' in str(row['trend_status']): matched_buy_rules.append("均線多頭")
+            if "外資一週內淨買超（隔日買入）" in buy_signals and bool(row.get('foreign_week_net_buy_next_day', False)): matched_buy_rules.append("外資一週內淨買超(隔日買入)")
+            if "三大法人週淨買超" in buy_signals and bool(row.get('total_recent_buy', False)): matched_buy_rules.append("三大法人週淨買超")
             
             # 判斷賣出條件
             matched_sell_rules = []
             if "KD 死亡交叉" in sell_signals and '死亡交叉' in str(row['signal_kd']): matched_sell_rules.append("KD死叉")
+            if "KDJ 死亡交叉" in sell_signals and bool(row.get('kdj_sell', False)): matched_sell_rules.append("KDJ死叉")
+            if "MACD 死亡交叉" in sell_signals and bool(row.get('macd_sell', False)): matched_sell_rules.append("MACD死叉")
+            if "BB 觸及上緣" in sell_signals and bool(row.get('bb_sell', False)): matched_sell_rules.append("BB觸及上緣")
             if "RSI 超買 (>70)" in sell_signals and '超買' in str(row['signal_rsi']): matched_sell_rules.append("RSI超買")
             if "正乖離過大" in sell_signals and '正乖離' in str(row['signal_bias']): matched_sell_rules.append("正乖離過大")
-            if "葛蘭必賣點" in sell_signals and '賣點' in str(row['signal_granville']): matched_sell_rules.append(row['signal_granville'])
+            if "葛蘭碧賣點" in sell_signals and '賣點' in str(row['signal_granville']): matched_sell_rules.append(row['signal_granville'])
             if "均線空頭排列" in sell_signals and '空頭排列' in str(row['trend_status']): matched_sell_rules.append("均線空頭")
+            if "外資週淨賣超" in sell_signals and bool(row.get('foreign_recent_sell', False)): matched_sell_rules.append("外資週淨賣超")
+            if "三大法人週淨賣超" in sell_signals and bool(row.get('total_recent_sell', False)): matched_sell_rules.append("三大法人週淨賣超")
             
             # 執行買入
             if holdings == 0:
@@ -324,7 +358,8 @@ def render_backtest(df, stock_code):
                     "報酬率(%)": "{:.2f}%",
                     "交易股數": "{:,}"
                 }),
-                use_container_width=True, hide_index=True
+                width="stretch", hide_index=True
             )
         else:
             st.info("此次回測期間內未觸發任何交易。")
+

@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy import func
 
 from db_config import get_db_session
+from institutional_fetcher import InstitutionalFetcher
+from models import DailyPrice, Stock
 from stock_list_manager import StockListManager
 from price_fetcher import PriceFetcher
 
@@ -12,6 +15,7 @@ class SchedulerManager:
         self.SessionLocal = get_db_session()
         self.list_manager = StockListManager(self.SessionLocal)
         self.price_fetcher = PriceFetcher(self.SessionLocal)
+        self.institutional_fetcher = InstitutionalFetcher(self.SessionLocal)
         
         self.scheduler = BlockingScheduler(timezone="Asia/Taipei")
 
@@ -30,6 +34,40 @@ class SchedulerManager:
         
         self.price_fetcher.update_prices(target_stocks, start_date, end_date)
         print("✅ 【全量資料更新】任務完成！")
+
+    def run_institutional_update(self):
+        """補齊資料庫內所有股票的三大法人資料，前端回測只讀 DB。"""
+        print(f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🏦 開始補齊【三大法人資料】...")
+
+        with self.SessionLocal() as session:
+            stocks = session.query(Stock.stock_code).filter(Stock.is_index != True).all()
+            stock_codes = [row.stock_code for row in stocks]
+
+            range_rows = session.query(
+                DailyPrice.stock_code,
+                func.min(DailyPrice.date),
+                func.max(DailyPrice.date),
+            ).filter(
+                DailyPrice.stock_code.in_(stock_codes)
+            ).group_by(DailyPrice.stock_code).all()
+            ranges = {stock_code: (start_date, end_date) for stock_code, start_date, end_date in range_rows}
+
+        for stock_code in stock_codes:
+            date_range = ranges.get(stock_code)
+            if not date_range:
+                print(f"略過 {stock_code}: 尚無價格資料")
+                continue
+
+            start_date, end_date = date_range
+            print(f"補齊 {stock_code} 法人資料: {start_date} ~ {end_date}")
+            count = self.institutional_fetcher.fetch_and_save(
+                stock_code,
+                start_date.strftime("%Y-%m-%d"),
+                end_date.strftime("%Y-%m-%d"),
+            )
+            print(f"✅ {stock_code} 新增 {count} 筆法人資料")
+
+        print("✅ 【三大法人資料】補齊完成！")
 
     def job_monthly_full_update(self):
         """[每月任務] 每個月初重新整理一次"""
