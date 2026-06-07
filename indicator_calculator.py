@@ -18,6 +18,7 @@ class IndicatorCalculator:
         """只計算 RSI 和 KD"""
         self._calculate_rsi()
         self._calculate_kd()
+        self._calculate_support_resistance()
         return self.df
 
     def _calculate_rsi(self):
@@ -42,3 +43,10 @@ class IndicatorCalculator:
         
         self.df['kd_k'] = rsv.ewm(com=2, adjust=False).mean() 
         self.df['kd_d'] = self.df['kd_k'].ewm(com=2, adjust=False).mean()
+
+    def _calculate_support_resistance(self, period=20):
+        """計算壓力(Resistance)與支撐(Support)"""
+        # 壓力線：過去 20 天的最高價
+        self.df['resistance'] = self.df['high_price'].rolling(window=period).max()
+        # 支撐線：過去 20 天的最低價
+        self.df['support'] = self.df['low_price'].rolling(window=period).min()
