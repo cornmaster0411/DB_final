@@ -43,6 +43,11 @@ def render_diagnostic(df_signals, stock_code):
     fig.add_trace(go.Scatter(x=df_plot['date'], y=df_plot['ma_120'], line=dict(color='#9467BD', width=1.5), name='MA120(半年)', visible='legendonly'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df_plot['date'], y=df_plot['ma_240'], line=dict(color='#8C564B', width=1.5), name='MA240(年線)', visible='legendonly'), row=1, col=1)
 
+    # === 畫出壓力線與支撐線 ===
+    if 'resistance' in df_plot.columns and 'support' in df_plot.columns:
+        fig.add_trace(go.Scatter(x=df_plot['date'], y=df_plot['resistance'], line=dict(color='red', width=1.5, dash='dash'), name='壓力線(20日高)'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df_plot['date'], y=df_plot['support'], line=dict(color='green', width=1.5, dash='dash'), name='支撐線(20日低)'), row=1, col=1)
+
     # 繪製副圖
     if sub_indicator == "成交量":
         fig.add_trace(go.Bar(x=df_plot['date'], y=df_plot['volume'], name='成交量', marker_color='rgba(150, 150, 150, 0.5)'), row=2, col=1)
